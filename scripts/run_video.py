@@ -345,7 +345,7 @@ def main():
     parser.add_argument(
         "--video_engine",
         default=None,
-        help="视频引擎：默认 seedance2.0/720p；显式高分辨率可用 minimax-h3/2K，或本地覆盖层引擎",
+        help="视频引擎：默认 seedance2.0/720p；minimax-h3 的分辨率取决于所选渠道，或使用本地覆盖层引擎",
     )
     parser.add_argument("--enable_image_quality_check", type=str2bool, default=True, help="图片质量检测")
     parser.add_argument("--enable_video_quality_check", type=str2bool, default=True, help="视频质量检测")

@@ -64,9 +64,9 @@ tools:
     provider: minimax_official
     status: approved
     model: MiniMax-H3
-    description: MiniMax H3（Hailuo-03）官方 V2 2K 视频生成；显式高分辨率路线
+    description: MiniMax H3（Hailuo-03）V2 视频生成；分辨率按所选渠道校验，默认 480p，不自动升档
     best_for: [high_resolution_video, multimodal_reference, first_last_frame, chinese_prompts]
-    avoid_for: [low_cost_preview, low_resolution_iteration]
+    avoid_for: []
     inputs:
       prompt: {type: string, required: true}
       generation_type: {type: string, required: false}
@@ -76,7 +76,7 @@ tools:
       video_paths: {type: array, required: false}
       audio_paths: {type: array, required: false}
       aspect_ratio: {type: string, required: false}
-      resolution: {type: string, required: false, fixed: 2K}
+      resolution: {type: string, required: false, default: 480p, description: "兼容渠道可选 480p/768P/1080p/2K；官方标准模型仅 768P/2K"}
       duration: {type: integer, required: false}
     outputs: {video: local_file_path}
     provides:
@@ -85,8 +85,8 @@ tools:
       limits: {duration_options: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], aspect_ratios: ["adaptive", "21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]}
     tags: [cinematic, high_quality, dynamic_motion]
     strengths: [native_2k_output, multimodal_reference, first_last_frame, local_result_download]
-    pitfalls: [H3 V2 currently accepts only 2K, result URL expires, text_to_video cannot use adaptive ratio]
-    qa: [ffprobe output, verify 2K dimensions, verify duration and ratio, inspect motion and native audio]
+    pitfalls: [resolution availability depends on endpoint, official MiniMax-H3 accepts 768P or 2K, unsupported tiers fail without automatic upgrade, result URL expires, text_to_video cannot use adaptive ratio]
+    qa: [ffprobe output, verify requested resolution against actual dimensions, verify duration and ratio, inspect motion and native audio]
     fallback: Seedance20VideoGeneratorTool
     requires_env: [MINIMAX_API_KEY]
     cost_tier: high

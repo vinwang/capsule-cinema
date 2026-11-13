@@ -10,6 +10,7 @@ import re
 import time
 from pathlib import Path
 from typing import Any, Optional, Sequence, Type
+from urllib.parse import urlsplit
 
 import requests
 from pydantic import BaseModel, Field
@@ -22,7 +23,8 @@ DEFAULT_MINIMAX_VIDEO_BASE_URL = "https://api.minimaxi.com"
 DEFAULT_MINIMAX_H3_MODEL = "MiniMax-H3"
 DEFAULT_OUTPUT_DIR = default_video_output_dir("minimax_h3")
 MINIMAX_H3_RATIOS = {"adaptive", "21:9", "16:9", "4:3", "1:1", "3:4", "9:16"}
-MINIMAX_H3_RESOLUTION = "2K"
+MINIMAX_H3_RESOLUTION = "480p"
+MINIMAX_H3_RESOLUTIONS = {"480P": "480p", "768P": "768P", "1080P": "1080p", "2K": "2K"}
 _MEDIA_LIMITS = {"image": 30 * 1024 * 1024, "video": 50 * 1024 * 1024, "audio": 15 * 1024 * 1024}
 _MEDIA_SUFFIXES = {
     "image": {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"},
@@ -51,7 +53,7 @@ class MiniMaxH3VideoSchema(BaseModel):
     audio_paths: Optional[list[str]] = Field(None, description="Reference audio clips; maximum 3")
     aspect_ratio: str = Field("9:16", description="Concrete ratio for text video; adaptive is supported elsewhere")
     ratio: Optional[str] = Field(None, description="Official ratio alias; overrides aspect_ratio")
-    resolution: str = Field("2K", description="MiniMax H3 V2 currently supports only 2K")
+    resolution: str = Field(MINIMAX_H3_RESOLUTION, description="480p, 768P, 1080p, or 2K; supported tiers depend on the configured endpoint. Official MiniMax-H3 supports 768P and 2K.")
     duration: int = Field(5, description="Whole seconds from 4 to 15")
     callback_url: Optional[str] = Field(None, description="Optional task-status callback URL")
     aigc_watermark: bool = Field(False, description="Add the provider AIGC watermark")
@@ -202,11 +204,15 @@ def build_minimax_h3_payload(
     duration: int | str = 5,
     callback_url: Optional[str] = None,
     aigc_watermark: bool = False,
+    base_url: str = DEFAULT_MINIMAX_VIDEO_BASE_URL,
 ) -> dict[str, Any]:
     if model != DEFAULT_MINIMAX_H3_MODEL:
         raise ValueError(f"MiniMax H3 V2 requires model={DEFAULT_MINIMAX_H3_MODEL}")
-    if str(resolution).strip().upper() != MINIMAX_H3_RESOLUTION.upper():
-        raise ValueError("MiniMax H3 V2 currently supports only resolution=2K")
+    normalized_resolution = MINIMAX_H3_RESOLUTIONS.get(str(resolution).strip().upper())
+    if normalized_resolution is None:
+        raise ValueError("MiniMax H3 resolution must be 480p, 768P, 1080p, or 2K")
+    if urlsplit(base_url).hostname in {"api.minimaxi.com", "api.minimax.io"} and normalized_resolution not in {"768P", "2K"}:
+        raise ValueError("Official MiniMax-H3 supports 768P and 2K; select a supported tier explicitly or configure a compatible endpoint. Resolution will not be upgraded automatically.")
 
     normalized_ratio = str(ratio or "").strip().lower()
     if normalized_ratio not in MINIMAX_H3_RATIOS:
@@ -230,7 +236,7 @@ def build_minimax_h3_payload(
             video_paths=video_paths,
             audio_paths=audio_paths,
         ),
-        "resolution": MINIMAX_H3_RESOLUTION,
+        "resolution": normalized_resolution,
         "duration": _duration_seconds(duration),
         "ratio": normalized_ratio,
         "aigc_watermark": bool(aigc_watermark),
@@ -291,8 +297,8 @@ def _download(url: str, destination: Path, *, timeout: int) -> None:
 
 
 class MiniMaxH3VideoGeneratorTool(BaseTool):
-    name: str = "MiniMax H3 2K video generator"
-    description: str = "Generate official MiniMax H3 V2 2K videos and download expiring results locally."
+    name: str = "MiniMax H3 video generator"
+    description: str = "Generate MiniMax H3 V2 videos at an explicitly selected resolution and download expiring results locally. Available resolutions depend on the endpoint."
     args_schema: Type[BaseModel] = MiniMaxH3VideoSchema
 
     def _run(
@@ -312,7 +318,7 @@ class MiniMaxH3VideoGeneratorTool(BaseTool):
         audio_paths: Optional[list[str]] = None,
         aspect_ratio: str = "9:16",
         ratio: Optional[str] = None,
-        resolution: str = "2K",
+        resolution: str = MINIMAX_H3_RESOLUTION,
         duration: int | str = 5,
         callback_url: Optional[str] = None,
         aigc_watermark: bool = False,
@@ -358,6 +364,7 @@ class MiniMaxH3VideoGeneratorTool(BaseTool):
                 duration=duration,
                 callback_url=callback_url,
                 aigc_watermark=aigc_watermark,
+                base_url=base_url,
             )
             headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
             timeout = max(1, int(os.getenv("MINIMAX_VIDEO_TIMEOUT_SECONDS", "300")))

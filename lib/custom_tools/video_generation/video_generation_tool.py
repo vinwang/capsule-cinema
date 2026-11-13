@@ -3,7 +3,7 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Type
 
-from crewai.tools import BaseTool
+from custom_tools.audio_generation.base_tool_compat import BaseTool
 from pydantic import BaseModel, Field
 
 from src.logger import get_logger
@@ -40,6 +40,7 @@ class GenerateVideoFromTextSchema(BaseModel):
     output_dir: str = Field(..., description="Output directory")
     engine: str = Field("seedance2.0", description="Video engine: seedance2.0 or a local-overlay engine")
     aspect_ratio: str = Field("9:16", description="Aspect ratio")
+    resolution: Optional[str] = Field(None, description="Requested output resolution; tiers depend on the engine and endpoint")
 
 
 class GenerateVideoFromImageSchema(BaseModel):
@@ -48,6 +49,7 @@ class GenerateVideoFromImageSchema(BaseModel):
     output_dir: str = Field(..., description="Output directory")
     engine: str = Field("seedance2.0", description="Video engine: seedance2.0 or a local-overlay engine")
     aspect_ratio: str = Field("9:16", description="Aspect ratio")
+    resolution: Optional[str] = Field(None, description="Requested output resolution; tiers depend on the engine and endpoint")
 
 
 class GenerateAllVideosSchema(BaseModel):
@@ -56,6 +58,7 @@ class GenerateAllVideosSchema(BaseModel):
     output_dir: str = Field(..., description="Output directory")
     engine: str = Field("seedance2.0", description="Video engine: seedance2.0 or a local-overlay engine")
     aspect_ratio: str = Field("9:16", description="Aspect ratio")
+    resolution: Optional[str] = Field(None, description="Requested output resolution; tiers depend on the engine and endpoint")
     is_transition_frame: bool = Field(False, description="Ignored in core runtime")
 
 
@@ -69,6 +72,7 @@ class UniversalVideoGenerationSchema(BaseModel):
     end_image_path: Optional[str] = Field(None, description="End frame path/URL for first_last_frame")
     images: Optional[List[str]] = Field(None, description="Image list for first_last_frame")
     aspect_ratio: str = Field("9:16", description="Aspect ratio")
+    resolution: Optional[str] = Field(None, description="Requested output resolution; tiers depend on the engine and endpoint")
 
 
 def _tool_for_engine(engine: str) -> BaseTool:
@@ -100,12 +104,12 @@ class GenerateVideoFromTextTool(BaseTool):
     description: str = "Generate a video from text with an approved public or local-overlay engine."
     args_schema: Type[BaseModel] = GenerateVideoFromTextSchema
 
-    def _run(self, prompt: str, output_dir: str, engine: str = "seedance2.0", aspect_ratio: str = "9:16", **kwargs: Any) -> Dict[str, Any]:
+    def _run(self, prompt: str, output_dir: str, engine: str = "seedance2.0", aspect_ratio: str = "9:16", generation_type: str = "text_to_video", **kwargs: Any) -> Dict[str, Any]:
         engine = normalize_video_engine(engine)
         try:
             tool_kwargs = {
                 "prompt": prompt,
-                "generation_type": "text_to_video",
+                "generation_type": generation_type,
                 "output_dir": output_dir,
                 "aspect_ratio": aspect_ratio,
                 "seedance_tier": seedance_tier_for_engine(engine),
@@ -116,7 +120,7 @@ class GenerateVideoFromTextTool(BaseTool):
             result = _tool_for_engine(engine)._run(**tool_kwargs)
             video_path = _video_path_from_result(result)
             if video_path:
-                return {"engine": engine, "generation_type": "text_to_video", "result": result, "output_path": video_path}
+                return {"engine": engine, "generation_type": generation_type, "result": result, "output_path": video_path}
             return {"error": str(result), "engine": engine}
         except Exception as exc:
             return {"error": str(exc), "engine": engine}
@@ -233,9 +237,12 @@ class UniversalVideoGenerationTool(BaseTool):
         end_image_path: Optional[str] = None,
         images: Optional[List[str]] = None,
         aspect_ratio: str = "9:16",
+        resolution: Optional[str] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
         engine = normalize_video_engine(engine)
+        if resolution is not None:
+            kwargs["resolution"] = resolution
         if generation_type == "first_last_frame":
             result = _tool_for_engine(engine)._run(
                 prompt=prompt,
@@ -273,5 +280,6 @@ class UniversalVideoGenerationTool(BaseTool):
             output_dir=output_dir,
             engine=engine,
             aspect_ratio=aspect_ratio,
+            generation_type=generation_type,
             **kwargs,
         )

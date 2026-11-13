@@ -115,7 +115,7 @@ class VideoGenerator:
         if missing_indices:
             if engine == "minimax-h3":
                 fallback_allowed = False
-                fallback_blocked_reason = "minimax-h3 is an explicit 2K route; lower-resolution fallback is forbidden"
+                fallback_blocked_reason = "minimax-h3 requires the selected engine and resolution; static fallback is forbidden"
             elif self._requires_same_engine(engine):
                 fallback_allowed = False
                 fallback_blocked_reason = f"{engine} requires same-engine output; provider and static fallback are forbidden"
@@ -196,8 +196,7 @@ class VideoGenerator:
         return bool(value and isinstance(value, str) and not value.startswith("错误"))
 
     def _fallback_engines(self, engine: str, required_flags: Optional[List[str]] = None) -> List[str]:
-        # MiniMax H3 V2 is the explicit 2K route. Falling back to the default
-        # 720p engine would silently violate a high-resolution requirement.
+        # Keep H3's selected engine and resolution instead of silently substituting another route.
         normalized_engine = normalize_video_engine_name(engine)
         if normalized_engine == "minimax-h3" or self._requires_same_engine(normalized_engine):
             return [normalized_engine]
